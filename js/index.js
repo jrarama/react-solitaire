@@ -1,3 +1,4 @@
+const MAX_HISTORY = 20;
 const SUITES = {
     '♣': {name: 'clubs', isRed: false},
     '♦': {name: 'diamonds', isRed: true},
@@ -85,34 +86,10 @@ class Card extends React.Component {
 class Board extends React.Component {
     constructor(props) {
         super(props);
-        this.state = this.newGame();
     }
 
-    newGame() {
-        var stockpile = randomFunc(CARDS);
-        var tableaus = [];
-
-        for (var i = 0; i < 7; i++) {
-            var items = stockpile.splice(0, i + 1);
-            var tblItems = [];
-            for (var j = 0; j < items.length; j++) {
-                tblItems.push({
-                    value: items[j].value,
-                    suite: items[j].suite,
-                    isFaceUp: j >= items.length - 1
-                });
-            }
-            tableaus.push(tblItems);
-        }
-
-        var waste = []; //stockpile.splice(0, 23);
-
-        return {
-            foundations: [[], [], [], []],
-            tableaus: tableaus,
-            stockpile: stockpile,
-            waste: waste
-        };
+    handleState(newState) {
+        this.props.onMove(newState);
     }
 
     createLayout(xIndex, yIndex, props) {
@@ -150,11 +127,15 @@ class Board extends React.Component {
     }
 
     handleCardClick(type, xIndex, yIndex, props) {
+        if (this.props.game.isWon(this.props.cards)) {
+            return;
+        }
+
         const A = {
-            W: this.state.waste,
-            S: this.state.stockpile,
-            F: this.state.foundations,
-            T: this.state.tableaus
+            W: this.props.cards.waste,
+            S: this.props.cards.stockpile,
+            F: this.props.cards.foundations,
+            T: this.props.cards.tableaus
         };
 
         const moves = this.getValidMoves(type, xIndex, yIndex, props);
@@ -163,8 +144,7 @@ class Board extends React.Component {
             return;
         }
 
-        console.log(moves);
-        var newState = JSON.parse(JSON.stringify(this.state));
+        var newState = JSON.parse(JSON.stringify(this.props.cards));
         const firstMove = moves[0];
         var taken = [];
 
@@ -190,7 +170,7 @@ class Board extends React.Component {
             newState.tableaus[firstMove.index] = newState.tableaus[firstMove.index].concat(taken);
         }
 
-        this.setState(newState);
+        this.handleState(newState);
     }
 
     isSameColor(one, two) {
@@ -199,10 +179,10 @@ class Board extends React.Component {
 
     getValidMoves(type, xIndex, yIndex, props) {
         const A = {
-            W: this.state.waste,
-            S: this.state.stockpile,
-            F: this.state.foundations,
-            T: this.state.tableaus
+            W: this.props.cards.waste,
+            S: this.props.cards.stockpile,
+            F: this.props.cards.foundations,
+            T: this.props.cards.tableaus
         };
 
         if (['W', 'S', 'F'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
@@ -270,12 +250,12 @@ class Board extends React.Component {
     }
 
     restockPile() {
-        var newState = JSON.parse(JSON.stringify(this.state));
+        var newState = JSON.parse(JSON.stringify(this.props.cards));
         var stockpile = newState.waste.slice().reverse();
         stockpile.forEach((s, i) => {s.isFaceUp = false;});
         newState.waste = [];
         newState.stockpile = stockpile;
-        this.setState(newState);
+        this.handleState(newState);
     }
 
     renderLayouts() {
@@ -301,10 +281,10 @@ class Board extends React.Component {
             stockpile: []
         };
 
-        const foundations = this.state.foundations;
-        const tableaus = this.state.tableaus;
-        const stockpile = this.state.stockpile;
-        const waste = this.state.waste;
+        const foundations = this.props.cards.foundations;
+        const tableaus = this.props.cards.tableaus;
+        const stockpile = this.props.cards.stockpile;
+        const waste = this.props.cards.waste;
 
         for (var i = 0; i < 4; i++) {
             for (var j = 0; j < foundations[i].length; j++) {
@@ -351,10 +331,105 @@ class Board extends React.Component {
     }
 }
 
+class Game extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            history: [this.createNewGame()],
+            takeCount: 1,
+            isWon: false
+        };
+    }
 
-ReactDOM.render(
-  (<div>
-    <Board takeCount={1} />
-  </div>),
+    newGame() {
+        var state = {
+            history: [this.createNewGame()],
+            takeCount: 1,
+            isWon: false
+        };
+        this.setState(state);
+    }
+
+    createNewGame() {
+        var stockpile = randomFunc(CARDS);
+        var tableaus = [];
+
+        for (var i = 0; i < 7; i++) {
+            var items = stockpile.splice(0, i + 1);
+            var tblItems = [];
+            for (var j = 0; j < items.length; j++) {
+                tblItems.push({
+                    value: items[j].value,
+                    suite: items[j].suite,
+                    isFaceUp: j >= items.length - 1
+                });
+            }
+            tableaus.push(tblItems);
+        }
+
+        var waste = []; //stockpile.splice(0, 23);
+
+        return {
+            foundations: [[], [], [], []],
+            tableaus: tableaus,
+            stockpile: stockpile,
+            waste: waste
+        };
+    }
+
+    isWon(cards) {
+        if (this.state.isWon) return true;
+
+        var blocked = cards.tableaus.findIndex(a => a.length > 0);
+        return blocked === -1;
+    }
+
+    onMove(newState) {
+        var state = JSON.parse(JSON.stringify(this.state));
+        state.history.push(newState);
+
+        if (state.history.length > MAX_HISTORY) {
+            state.history = state.history.splice(state.history.length - MAX_HISTORY);
+        }
+
+        if (this.isWon(newState)) {
+            state.isWon = true;
+            this.setState(state);
+            this.render();
+            alert("You Win!");
+        } else {
+            this.setState(state);
+        }
+
+    }
+
+    undo() {
+        var state = JSON.parse(JSON.stringify(this.state));
+        if (state.history.length > 1) {
+            state.history.pop();
+        }
+        if (state.isWon) {
+            state.isWon = false;
+        }
+        this.setState(state);
+    }
+
+    render() {
+        var state = this.state;
+        var history = state.history;
+        var latest = history[history.length - 1];
+
+        return (
+            <div className="game">
+                <button className='game-button' onClick={() => this.newGame()}>New Game</button>
+                <button className='game-button' onClick={() => this.undo()} style={{top: '25px'}}>Undo</button>
+                <Board game={this} takeCount={this.state.takeCount} cards={latest} onMove={(s) => this.onMove(s)} />
+            </div>
+        )
+    }
+}
+
+
+ReactDOM.render(<Game />,
   document.getElementById('root')
 );
