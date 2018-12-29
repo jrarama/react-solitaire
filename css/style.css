@@ -1,0 +1,88 @@
+body {
+  font: 14px "Century Gothic", Futura, sans-serif;
+  margin: 20px;
+}
+
+#root {
+  position: relative;
+}
+
+* {
+  -webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
+  -moz-box-sizing: border-box;    /* Firefox, other Gecko */
+  box-sizing: border-box;
+}
+
+ol, ul {
+  padding-left: 30px;
+}
+
+.board-row:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.status {
+  margin-bottom: 10px;
+}
+
+.card-layout {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 80px;
+  color: #579257;
+  background: lightgreen;
+  border: 2px solid #ccc;
+  float: left;
+  font-size: 50px;
+  font-weight: bold;
+  height: 120px;
+  border-radius: 5px;
+  line-height: 115px;
+  text-align: center;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #999;
+  line-height: 20px;
+  text-align: left;
+  color: black;
+  font-size: 20px;
+  margin-right: -1px;
+  margin-top: -1px;
+  padding: 3px 5px;
+}
+
+.card-down {
+  background: #0000af;
+  border-color: green;
+  border-width: 3px;
+}
+
+.card .card-suite {
+  font-size: 16px;
+}
+
+.red {
+  color: red;
+}
+
+.card:focus {
+  outline: none;
+}
+
+.kbd-navigation .card:focus {
+  background: #ddd;
+}
+
+.game {
+  display: flex;
+  flex-direction: row;
+}
+
+.game-info {
+  margin-left: 20px;
+}
