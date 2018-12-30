@@ -153,7 +153,7 @@ class Board extends React.Component {
         } else if (type === 'W') {
             taken.push(newState.waste.pop());
         } else if (type === 'F') {
-            taken.push(newState.foundations.pop());
+            taken.push(newState.foundations[xIndex].pop());
         } else if (type === 'T') {
             var CT = newState.tableaus[xIndex];
             taken = newState.tableaus[xIndex].splice(yIndex);
@@ -185,7 +185,9 @@ class Board extends React.Component {
             T: this.props.cards.tableaus
         };
 
-        if (['W', 'S', 'F'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
+        if (['W', 'S'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
+            return [];
+        } else if (['F'].indexOf(type) > -1 && yIndex != A[type][xIndex].length - 1) {
             return [];
         }
 
@@ -199,6 +201,9 @@ class Board extends React.Component {
         }
 
         var moves = [];
+        // TODO: Putting to foundation should prohibit if there are other cards
+        // over the clicked card
+
         // Check Foundations
         for (var i = 0; i < 4; i++) {
             if ('F' === type && i === xIndex) {
@@ -215,6 +220,11 @@ class Board extends React.Component {
                 var prevIndex = ORDER.indexOf(AF[AF.length - 1].value);
                 var curIndex = ORDER.indexOf(props.value);
 
+                if (['W'].indexOf(type) > -1 && yIndex !== A[type].length - 1) {
+                    continue;
+                } else if (['T', 'F'].indexOf(type) > -1 && yIndex !== A[type][xIndex].length - 1) {
+                    continue;
+                }
                 if (prevIndex > -1 && curIndex > -1 && curIndex - prevIndex === 1) {
                     moves.push({type: 'F', index: i, count: 1});
                     break;
