@@ -88,10 +88,6 @@ class Board extends React.Component {
         super(props);
     }
 
-    handleState(newState) {
-        this.props.onMove(newState);
-    }
-
     createLayout(xIndex, yIndex, props) {
         var l = LAYOUTS[props.name];
         return (<CardLayout
@@ -120,152 +116,10 @@ class Board extends React.Component {
             value={props.value}
             suite={props.suite}
             isFaceUp={isFaceUp}
-            onClick={() => this.handleCardClick(type, xIndex, yIndex, props)}
+            onClick={() => this.props.handleCardClick(type, xIndex, yIndex, props)}
             x={(CARD_SIZE.x + CARD_SIZE.marginX) * l.baseX + (CARD_SIZE.x + CARD_SIZE.marginX) * xIndex}
             y={(CARD_SIZE.y + CARD_SIZE.marginY) * l.baseY + marginY}
         />);
-    }
-
-    handleCardClick(type, xIndex, yIndex, props) {
-        if (this.props.game.isWon(this.props.cards)) {
-            return;
-        }
-
-        const A = {
-            W: this.props.cards.waste,
-            S: this.props.cards.stockpile,
-            F: this.props.cards.foundations,
-            T: this.props.cards.tableaus
-        };
-
-        const moves = this.getValidMoves(type, xIndex, yIndex, props);
-        if (moves.length === 0) {
-            console.log('Invalid move');
-            return;
-        }
-
-        var newState = JSON.parse(JSON.stringify(this.props.cards));
-        const firstMove = moves[0];
-        var taken = [];
-
-        if (type === 'S') {
-            taken = newState.stockpile.splice(newState.stockpile.length - this.props.takeCount);
-        } else if (type === 'W') {
-            taken.push(newState.waste.pop());
-        } else if (type === 'F') {
-            taken.push(newState.foundations[xIndex].pop());
-        } else if (type === 'T') {
-            var CT = newState.tableaus[xIndex];
-            taken = newState.tableaus[xIndex].splice(yIndex);
-            if (CT.length > 0) {
-                newState.tableaus[xIndex][CT.length - 1].isFaceUp = true;
-            }
-        }
-
-        if ('W' === firstMove.type) {
-            newState.waste = newState.waste.concat(taken);
-        } else if ('F' === firstMove.type) {
-            newState.foundations[firstMove.index] = newState.foundations[firstMove.index].concat(taken);
-        } else if ('T' === firstMove.type) {
-            newState.tableaus[firstMove.index] = newState.tableaus[firstMove.index].concat(taken);
-        }
-
-        this.handleState(newState);
-    }
-
-    isSameColor(one, two) {
-        return SUITES[one.suite].isRed === SUITES[two.suite].isRed;
-    }
-
-    getValidMoves(type, xIndex, yIndex, props) {
-        const A = {
-            W: this.props.cards.waste,
-            S: this.props.cards.stockpile,
-            F: this.props.cards.foundations,
-            T: this.props.cards.tableaus
-        };
-
-        if (['W', 'S'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
-            return [];
-        } else if (['F'].indexOf(type) > -1 && yIndex != A[type][xIndex].length - 1) {
-            return [];
-        }
-
-        if ('T' === type && !props.isFaceUp) {
-            console.log('Invalid move');
-            return [];
-        }
-
-        if (type === 'S') {
-            return [{type: 'W', index: 0, count: 1}];
-        }
-
-        var moves = [];
-        // TODO: Putting to foundation should prohibit if there are other cards
-        // over the clicked card
-
-        // Check Foundations
-        for (var i = 0; i < 4; i++) {
-            if ('F' === type && i === xIndex) {
-                continue;
-            }
-
-            var AF = A.F[i];
-            if (props.value === 'A' && AF.length === 0) {
-                moves.push({type: 'F', index: i, count: 1});
-                break;
-            } else if (AF.length > 0) {
-                var sameSuit = AF[AF.length - 1].suite === props.suite;
-                if (!sameSuit) continue;
-                var prevIndex = ORDER.indexOf(AF[AF.length - 1].value);
-                var curIndex = ORDER.indexOf(props.value);
-
-                if (['W'].indexOf(type) > -1 && yIndex !== A[type].length - 1) {
-                    continue;
-                } else if (['T', 'F'].indexOf(type) > -1 && yIndex !== A[type][xIndex].length - 1) {
-                    continue;
-                }
-                if (prevIndex > -1 && curIndex > -1 && curIndex - prevIndex === 1) {
-                    moves.push({type: 'F', index: i, count: 1});
-                    break;
-                }
-            }
-        }
-
-        // Check Tableaus
-        for (var i = 0; i < 7; i++) {
-            if ('T' === type && i === xIndex) {
-                continue;
-            }
-
-            var AT = A.T[i];
-            if (props.value === 'K' && AT.length === 0) {
-                moves.push({type: 'T', index: i, count: AT.length - yIndex});
-                break;
-            } else if (AT.length > 0) {
-                var diffColor = !this.isSameColor(AT[AT.length - 1], props);
-                if (!diffColor) continue;
-
-                var prevIndex = ORDER.indexOf(AT[AT.length - 1].value);
-                var curIndex = ORDER.indexOf(props.value);
-
-                if (prevIndex > -1 && curIndex > -1 && prevIndex - curIndex === 1) {
-                    moves.push({type: 'T', index: i, count: AT.length - yIndex});
-                    break;
-                }
-            }
-        }
-
-        return moves;
-    }
-
-    restockPile() {
-        var newState = JSON.parse(JSON.stringify(this.props.cards));
-        var stockpile = newState.waste.slice().reverse();
-        stockpile.forEach((s, i) => {s.isFaceUp = false;});
-        newState.waste = [];
-        newState.stockpile = stockpile;
-        this.handleState(newState);
     }
 
     renderLayouts() {
@@ -279,7 +133,7 @@ class Board extends React.Component {
             layouts.push(this.createLayout(i, 0, {name: 'T', onClick: noop}));
         }
 
-        layouts.push(this.createLayout(0, 0, {name: 'S', onClick: () => this.restockPile()}));
+        layouts.push(this.createLayout(0, 0, {name: 'S', onClick: () => this.props.onRestockPile()}));
         return (layouts);
     }
 
@@ -390,8 +244,8 @@ class Game extends React.Component {
     isWon(cards) {
         if (this.state.isWon) return true;
 
-        var blocked = cards.tableaus.findIndex(a => a.length > 0);
-        return blocked === -1;
+        var noComplete = cards.foundations.findIndex(a => a.length < 13);
+        return noComplete === -1;
     }
 
     onMove(newState) {
@@ -410,7 +264,6 @@ class Game extends React.Component {
         } else {
             this.setState(state);
         }
-
     }
 
     undo() {
@@ -424,6 +277,149 @@ class Game extends React.Component {
         this.setState(state);
     }
 
+    restockPile() {
+        var history = this.state.history;
+        var newState = JSON.parse(JSON.stringify(history[history.length - 1]));
+        var stockpile = newState.waste.slice().reverse();
+        stockpile.forEach((s, i) => {s.isFaceUp = false;});
+        newState.waste = [];
+        newState.stockpile = stockpile;
+        this.onMove(newState);
+    }
+
+    isSameColor(one, two) {
+        return SUITES[one.suite].isRed === SUITES[two.suite].isRed;
+    }
+
+    getValidMoves(type, xIndex, yIndex, props) {
+        var history = this.state.history;
+        var latest = history[history.length - 1];
+        const A = {
+            W: latest.waste,
+            S: latest.stockpile,
+            F: latest.foundations,
+            T: latest.tableaus
+        };
+
+        if (['W', 'S'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
+            return [];
+        } else if (['F'].indexOf(type) > -1 && yIndex != A[type][xIndex].length - 1) {
+            return [];
+        }
+
+        if ('T' === type && !props.isFaceUp) {
+            console.log('Invalid move');
+            return [];
+        }
+
+        if (type === 'S') {
+            return [{type: 'W', index: 0}];
+        }
+
+        var moves = [];
+
+        // Check Foundations
+        for (var i = 0; i < 4; i++) {
+            if ('F' === type && i === xIndex) {
+                continue;
+            }
+
+            var AF = A.F[i];
+            if (props.value === 'A' && AF.length === 0) {
+                moves.push({type: 'F', index: i});
+            } else if (AF.length > 0) {
+                var sameSuit = AF[AF.length - 1].suite === props.suite;
+                if (!sameSuit) continue;
+                var prevIndex = ORDER.indexOf(AF[AF.length - 1].value);
+                var curIndex = ORDER.indexOf(props.value);
+
+                if (['W'].indexOf(type) > -1 && yIndex !== A[type].length - 1) {
+                    continue;
+                } else if (['T', 'F'].indexOf(type) > -1 && yIndex !== A[type][xIndex].length - 1) {
+                    continue;
+                }
+                if (prevIndex > -1 && curIndex > -1 && curIndex - prevIndex === 1) {
+                    moves.push({type: 'F', index: i});
+                    break;
+                }
+            }
+        }
+
+        // Check Tableaus
+        for (var i = 0; i < 7; i++) {
+            if ('T' === type && i === xIndex) {
+                continue;
+            }
+
+            var AT = A.T[i];
+            if (props.value === 'K' && AT.length === 0) {
+                moves.push({type: 'T', index: i});
+            } else if (AT.length > 0) {
+                var diffColor = !this.isSameColor(AT[AT.length - 1], props);
+                if (!diffColor) continue;
+
+                var prevIndex = ORDER.indexOf(AT[AT.length - 1].value);
+                var curIndex = ORDER.indexOf(props.value);
+
+                if (prevIndex > -1 && curIndex > -1 && prevIndex - curIndex === 1) {
+                    moves.push({type: 'T', index: i});
+                    break;
+                }
+            }
+        }
+
+        return moves;
+    }
+
+    handleCardClick(type, xIndex, yIndex, props) {
+        var history = this.state.history;
+        var latest = history[history.length - 1];
+
+        if (this.isWon(latest)) {
+            return;
+        }
+
+        const A = {
+            W: latest.waste,
+            S: latest.stockpile,
+            F: latest.foundations,
+            T: latest.tableaus
+        };
+
+        const moves = this.getValidMoves(type, xIndex, yIndex, props);
+        if (moves.length === 0) {
+            return;
+        }
+
+        var newState = JSON.parse(JSON.stringify(latest));
+        const firstMove = moves[0];
+        var taken = [];
+
+        if (type === 'S') {
+            taken = newState.stockpile.splice(newState.stockpile.length - this.state.takeCount);
+        } else if (type === 'W') {
+            taken.push(newState.waste.pop());
+        } else if (type === 'F') {
+            taken.push(newState.foundations[xIndex].pop());
+        } else if (type === 'T') {
+            var CT = newState.tableaus[xIndex];
+            taken = newState.tableaus[xIndex].splice(yIndex);
+            if (CT.length > 0) {
+                newState.tableaus[xIndex][CT.length - 1].isFaceUp = true;
+            }
+        }
+
+        if ('W' === firstMove.type) {
+            newState.waste = newState.waste.concat(taken);
+        } else if ('F' === firstMove.type) {
+            newState.foundations[firstMove.index] = newState.foundations[firstMove.index].concat(taken);
+        } else if ('T' === firstMove.type) {
+            newState.tableaus[firstMove.index] = newState.tableaus[firstMove.index].concat(taken);
+        }
+
+        this.onMove(newState);
+    }
+
     render() {
         var state = this.state;
         var history = state.history;
@@ -433,7 +429,14 @@ class Game extends React.Component {
             <div className="game">
                 <button className='game-button' onClick={() => this.newGame()}>New Game</button>
                 <button className='game-button' onClick={() => this.undo()} style={{top: '25px'}}>Undo</button>
-                <Board game={this} takeCount={this.state.takeCount} cards={latest} onMove={(s) => this.onMove(s)} />
+                <Board
+                    game={this}
+                    takeCount={this.state.takeCount}
+                    cards={latest}
+                    onMove={(s) => this.onMove(s)}
+                    onRestockPile={() => this.restockPile()}
+                    handleCardClick={(type, xIndex, yIndex, props) => this.handleCardClick(type, xIndex, yIndex, props)}
+                    />
             </div>
         )
     }
