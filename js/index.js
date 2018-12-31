@@ -1,4 +1,6 @@
 const MAX_HISTORY = 20;
+const SUITE_TYPES = ['♣', '♦', '♥', '♠'];
+
 const SUITES = {
     '♣': {name: 'clubs', isRed: false},
     '♦': {name: 'diamonds', isRed: true},
@@ -216,6 +218,7 @@ class Game extends React.Component {
             isWon: false
         };
 
+        this.isAuto = false;
         this.hintTimer = -1;
     }
 
@@ -242,6 +245,8 @@ class Game extends React.Component {
             isWon: false
         };
         this.setState(state);
+        this.isAuto = false;
+        this.hintTimer = -1;
     }
 
     createNewGame() {
@@ -249,6 +254,7 @@ class Game extends React.Component {
         var tableaus = [];
 
         for (var i = 0; i < 7; i++) {
+            // var items = stockpile.splice(0, i == 1 ? 2: 1);
             var items = stockpile.splice(0, i + 1);
             var tblItems = [];
             for (var j = 0; j < items.length; j++) {
@@ -262,7 +268,9 @@ class Game extends React.Component {
             tableaus.push(tblItems);
         }
 
-        var waste =  stockpile.splice(0, 23);
+        var waste = []; // stockpile.splice(0, 23);
+
+        stockpile.forEach((s, i) => {s.isFaceUp = false;});
 
         return {
             foundations: [[], [], [], []],
@@ -300,6 +308,17 @@ class Game extends React.Component {
         return noComplete === -1;
     }
 
+    canAutocomplete(latest) {
+        const A = latest;
+        for (var i = 0; i < A.tableaus.length; i++) {
+            const AT = A.tableaus[i];
+            if (AT.findIndex((a) => !a.isFaceUp) > -1) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     onMove(newState) {
         var state = JSON.parse(JSON.stringify(this.state));
         state.history.push(newState);
@@ -316,6 +335,14 @@ class Game extends React.Component {
         } else {
             this.setState(state);
         }
+
+        if (!this.isAuto) {
+            var canWin = this.canAutocomplete(state.history[state.history.length - 1]);
+            if (canWin) {
+                console.log('Can win');
+                this.isAuto = true;
+            }
+        }
     }
 
     undo() {
@@ -329,21 +356,24 @@ class Game extends React.Component {
         this.setState(state);
     }
 
-    restockPile() {
+    getRestockPile() {
         var history = this.state.history;
         var newState = JSON.parse(JSON.stringify(history[history.length - 1]));
         var stockpile = newState.waste.slice().reverse();
         stockpile.forEach((s, i) => {s.isFaceUp = false;});
         newState.waste = [];
         newState.stockpile = stockpile;
-        this.onMove(newState);
+        return newState;
+    }
+    restockPile() {
+        this.onMove(this.getRestockPile());
     }
 
     isSameColor(one, two) {
         return SUITES[one.suite].isRed === SUITES[two.suite].isRed;
     }
 
-    getValidMoves(type, xIndex, yIndex, props) {
+    getValidMoves(type, xIndex, yIndex, props, isHint) {
         const A = this.getLatestMove();
 
         if (['W', 'S'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
@@ -376,7 +406,11 @@ class Game extends React.Component {
 
                 var AF = A.F[i];
                 if (props.value === 'A' && AF.length === 0) {
-                    moves.push({type: 'F', index: i});
+                    if (isHint && type === 'F') {
+                        console.log('Already in foundation');
+                    } else {
+                        moves.push({type: 'F', index: i});
+                    }
                     break;
                 } else if (AF.length > 0) {
                     var sameSuit = AF[AF.length - 1].suite === props.suite;
@@ -403,8 +437,12 @@ class Game extends React.Component {
                 }
 
                 var AT = A.T[i];
-                if (props.value === 'K' && AT.length === 0) {
-                    moves.push({type: 'T', index: i});
+                if (!isHint && props.value === 'K' && AT.length === 0) {
+                    if (isHint && type === 'T') {
+                        console.log('Already in tableau');
+                    } else {
+                        moves.push({type: 'T', index: i});
+                    }
                 } else if (AT.length > 0) {
                     var diffColor = !this.isSameColor(AT[AT.length - 1], props);
                     if (!diffColor) continue;
@@ -423,7 +461,43 @@ class Game extends React.Component {
         return moves;
     }
 
+    newMovementState(card, move) {
+        if (card.type === 'R') {
+            return this.getRestockPile();
+        }
+
+        var latest = this.getLatestHistory();
+        var newState = JSON.parse(JSON.stringify(latest));
+        var type = card.type;
+        var taken = [];
+
+        if (type === 'S') {
+            taken = newState.stockpile.splice(newState.stockpile.length - this.state.takeCount);
+        } else if (type === 'W') {
+            taken.push(newState.waste.pop());
+        } else if (type === 'F') {
+            taken.push(newState.foundations[card.xIndex].pop());
+        } else if (type === 'T') {
+            var CT = newState.tableaus[card.xIndex];
+            taken = newState.tableaus[card.xIndex].splice(card.yIndex);
+            if (CT.length > 0) {
+                newState.tableaus[card.xIndex][CT.length - 1].isFaceUp = true;
+            }
+        }
+
+        if ('W' === move.type) {
+            newState.waste = newState.waste.concat(taken);
+        } else if ('F' === move.type) {
+            newState.foundations[move.index] = newState.foundations[move.index].concat(taken);
+        } else if ('T' === move.type) {
+            newState.tableaus[move.index] = newState.tableaus[move.index].concat(taken);
+        }
+
+        return newState;
+    }
+
     handleCardClick(type, xIndex, yIndex, props) {
+        this.isAuto = false;
         var latest = this.getLatestHistory();
 
         if (this.isWon(latest)) {
@@ -437,36 +511,14 @@ class Game extends React.Component {
             T: latest.tableaus
         };
 
-        const moves = this.getValidMoves(type, xIndex, yIndex, props);
+        const moves = this.getValidMoves(type, xIndex, yIndex, props, false);
         if (moves.length === 0) {
             return;
         }
 
-        var newState = JSON.parse(JSON.stringify(latest));
         const firstMove = moves[0];
-        var taken = [];
-
-        if (type === 'S') {
-            taken = newState.stockpile.splice(newState.stockpile.length - this.state.takeCount);
-        } else if (type === 'W') {
-            taken.push(newState.waste.pop());
-        } else if (type === 'F') {
-            taken.push(newState.foundations[xIndex].pop());
-        } else if (type === 'T') {
-            var CT = newState.tableaus[xIndex];
-            taken = newState.tableaus[xIndex].splice(yIndex);
-            if (CT.length > 0) {
-                newState.tableaus[xIndex][CT.length - 1].isFaceUp = true;
-            }
-        }
-
-        if ('W' === firstMove.type) {
-            newState.waste = newState.waste.concat(taken);
-        } else if ('F' === firstMove.type) {
-            newState.foundations[firstMove.index] = newState.foundations[firstMove.index].concat(taken);
-        } else if ('T' === firstMove.type) {
-            newState.tableaus[firstMove.index] = newState.tableaus[firstMove.index].concat(taken);
-        }
+        const card = { type: type, xIndex: xIndex, yIndex: yIndex, props: props };
+        var newState = this.newMovementState(card, firstMove);
 
         this.onMove(newState);
     }
@@ -508,14 +560,14 @@ class Game extends React.Component {
         var H = JSON.parse(JSON.stringify(this.getLatestHistory()));
 
         hints.forEach((hint, i) => {
-            if (hint.type === 'R') {
+            if (hint.type === 'T') {
+                H.tableaus[hint.xIndex][hint.yIndex].isHighlighted = true;
+            } else if (hint.type === 'W') {
+                H.waste[H.waste.length - 1].isHighlighted = true;
+            } else if (hint.type === 'R') {
                 H.layouts.recycle.props.isHighlighted = true;
             } else if (hint.type === 'S') {
                 H.stockpile[H.stockpile.length - 1].isHighlighted = true;
-            }  else if (hint.type === 'W') {
-                H.waste[H.waste.length - 1].isHighlighted = true;
-            } else if (hint.type === 'T') {
-                H.tableaus[hint.xIndex][hint.yIndex].isHighlighted = true;
             } else if (hint.type === 'F') {
                 H.foundations[hint.xIndex][hint.yIndex].isHighlighted = true;
             }
@@ -527,7 +579,6 @@ class Game extends React.Component {
 
         this.hintTimer = window.setTimeout(() => this.removeHints(), 1000);
 
-        console.log(this.hintTimer);
         this.setState(newState);
     }
 
@@ -538,6 +589,17 @@ class Game extends React.Component {
         var canMove = [];
 
         // For foundation, Stock and Waste, only the last item can be moved
+
+        // For Tableaus, any opened card can be moved
+        for (var i = 0; i < 7; i++) {
+            const AT = A.T[i];
+
+            for (var j = 0; j < AT.length; j++) {
+                if (AT[j].isFaceUp) {
+                    canMove.push({type: 'T', xIndex: i, yIndex: j, props: AT[j]});
+                }
+            }
+        }
 
         // a. Check Waste
         if (A.W.length > 0) {
@@ -561,40 +623,146 @@ class Game extends React.Component {
             }
         }
 
-        // For Tableaus, any opened card can be moved
-        for (var i = 0; i < 7; i++) {
-            const AT = A.T[i];
-
-            for (var j = 0; j < AT.length; j++) {
-                if (AT[j].isFaceUp) {
-                    canMove.push({type: 'T', xIndex: i, yIndex: j, props: AT[j]});
-                }
-            }
-        }
 
         const hints = [];
 
         for (var i = 0, l = canMove.length; i < l; i++) {
             var M = canMove[i];
-            var moves = this.getValidMoves(M.type, M.xIndex, M.yIndex, M.props);
+            var moves = this.getValidMoves(M.type, M.xIndex, M.yIndex, M.props, true);
             if (moves.length > 0) {
                 M.moves = moves;
                 hints.push(M);
             }
         }
 
+        console.log(hints);
         return hints;
+    }
+
+
+    moveTopCard(type, xIndex) {
+        const A = this.getLatestMove();
+        const AX = ['T'].indexOf(type) > -1 ? A[type][xIndex] : A[type];
+
+        if (AX.length === 0 && A.S.length === 0 && A.W.length > 0) {
+            this.restockPile();
+            return;
+        }
+        var yIndex = AX.length - 1;
+        var moves = this.getValidMoves(type, xIndex, yIndex, AX[yIndex], true);
+
+        const firstMove = moves[0];
+        const card = { type: type, xIndex: xIndex, yIndex: yIndex, props: AX[yIndex] };
+        var newState = this.newMovementState(card, firstMove);
+        this.onMove(newState);
+    }
+
+    moveStockPile() {
+        const A = this.getLatestMove();
+        var moves = this.getValidMoves('S', 0, A.S.length - 1, A.S[A.S.length - 1], true);
+
+        const firstMove = moves[0];
+        const card = { type: 'S', xIndex: 0, yIndex: A.S.length - 1, props: A.S[A.S.length - 1] };
+        var newState = this.newMovementState(card, firstMove);
+        this.onMove(newState);
+    }
+
+    autoMove() {
+        var ito = this;
+        var x = window.setInterval(function() {
+            if (ito.state.isWon) {
+                window.clearInterval(x);
+                return false;
+            }
+            ito.doAutoMove();
+            return true;
+        }, 100);
+    }
+
+    doAutoMove() {
+        const autoMove = this.getAutoMove();
+        const A = this.getLatestMove();
+        const AX = A[autoMove.type];
+        var card = JSON.parse(JSON.stringify(autoMove));
+
+
+        if (['S', 'W'].indexOf(autoMove.type) > -1) {
+            if (autoMove.yIndex !== AX.length -1 || autoMove.type === 'S') {
+                this.moveTopCard('S', 0);
+                return;
+            } else  {
+                this.moveTopCard('W', 0);
+                return;
+            }
+        } else if (['T'].indexOf(autoMove.type) > -1) {
+            if (autoMove.yIndex === AX[autoMove.xIndex].length -1) {
+                this.moveTopCard('T', autoMove.xIndex);
+                return;
+            }
+        }
+
+        if (A.S.length === 0 && A.W.length > 0) {
+            this.restockPile();
+            return;
+        }
+
+        console.log(autoMove);
+
+    }
+
+    getAutoMove() {
+        for (var o = 0; o < ORDER.length; o++) {
+            var O = ORDER[o];
+            for (var s = 0; s < 4; s++) {
+                var S = SUITE_TYPES[s];
+
+                var inFoundation = this.findCard('F', O, S);
+                if (inFoundation) {
+                    continue;
+                }
+
+                var inWaste = this.findCard('W', O, S);
+                if (inWaste) return inWaste;
+
+                var inStock = this.findCard('S', O, S);
+                if (inStock) return inStock;
+
+                var inTableau = this.findCard('T', O, S);
+                if (inTableau) return inTableau;
+            }
+        }
+    }
+
+    findCard(layout, value, suite) {
+        var A = this.getLatestMove()[layout];
+
+        if (['S', 'W'].indexOf(layout) > -1) {
+            var yIndex = A.findIndex((a) => a.value === value && a.suite === suite);
+            if (yIndex > -1) {
+                return {type: layout, xIndex: 0, yIndex: yIndex, props: A[yIndex]};
+            }
+        } else {
+            for (var i = 0; i < A.length; i++) {
+                var yIndex = A[i].findIndex((a) => a.value === value && a.suite === suite);
+                if (yIndex > -1) {
+                    return {type: layout, xIndex: i, yIndex: yIndex, props: A[i][yIndex]};
+                }
+            }
+        }
+        return null;
     }
 
     render() {
         var history = this.state.history;
         var latest = history[history.length - 1];
+        var canAutocomplete = this.canAutocomplete(latest);
 
         return (
             <div className="game">
                 <button className='game-button' onClick={() => this.newGame()}>New Game</button>
                 <button className='game-button' onClick={() => this.undo()} style={{top: '25px'}}>Undo</button>
                 <button className='game-button' onClick={() => this.showHints()} style={{top: '50px'}}>Hint</button>
+                <button className='game-button' onClick={() => this.autoMove()} style={{top: '75px', display: canAutocomplete ? 'block': 'none'}}>Auto Move</button>
                 <Board
                     game={this}
                     takeCount={this.state.takeCount}
