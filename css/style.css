@@ -77,6 +77,11 @@ ol, ul {
   border-width: 3px;
 }
 
+.card-highlighted {
+  background: cyan;
+  border: 3px solid yellow;
+}
+
 .card .card-suite {
   font-size: 16px;
 }

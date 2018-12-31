@@ -11,6 +11,7 @@ const LAYOUTS = {
     'S': {name: 'stock', value: 'S', baseX: 6, baseY: 0, marginClose: 0, marginOpen: 0},
     'T': {name: 'tableau', value: '', baseX: 0, baseY: 1, marginClose: 10, marginOpen: 28},
     'W': {name: 'waste', value: '', baseX: 7, baseY: 0, marginClose: 0, marginOpen: 28},
+    'R': {name: 'recycle', value: 'R', baseX: 6, baseY: 0, marginClose: 0, marginOpen: 0}
 };
 
 const ORDER = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
@@ -35,7 +36,9 @@ function randomFunc(arr) {
 function CardLayout(props) {
     return (
         <div
-            className={'card-layout card-layout-' + props.name.toLowerCase()}
+            className={'card-layout card-layout-' + props.name.toLowerCase()
+                    + (props.isHighlighted ? ' card-highlighted':'')
+                }
             onClick={props.onClick}
             style={{
                 left: props.x + 'px',
@@ -57,7 +60,8 @@ class Card extends React.Component {
             return (
                 <div
                     className={'card-layout card'
-                        + (SUITES[props.suite].isRed ? ' red':'' )
+                        + (SUITES[props.suite].isRed ? ' red':'')
+                        + (props.isHighlighted ? ' card-highlighted':'')
                     }
                     onClick={props.onClick}
                     style={{
@@ -71,7 +75,9 @@ class Card extends React.Component {
         } else {
             return (
                 <div
-                    className={'card-layout card card-down'}
+                    className={'card-layout card card-down'
+                            + (props.isHighlighted ? ' card-highlighted':'')
+                        }
                     onClick={props.onClick}
                     style={{
                         left: props.x + 'px',
@@ -95,6 +101,7 @@ class Board extends React.Component {
             name={props.name}
             value={l.value}
             onClick={props.onClick}
+            isHighlighted={props.isHighlighted}
             x={(CARD_SIZE.x + CARD_SIZE.marginX) * l.baseX + (CARD_SIZE.x + CARD_SIZE.marginX) * xIndex}
             y={(CARD_SIZE.y + CARD_SIZE.marginY) * l.baseY + (CARD_SIZE.y + CARD_SIZE.marginY) * yIndex}
         />);
@@ -116,6 +123,7 @@ class Board extends React.Component {
             value={props.value}
             suite={props.suite}
             isFaceUp={isFaceUp}
+            isHighlighted={props.isHighlighted}
             onClick={() => this.props.handleCardClick(type, xIndex, yIndex, props)}
             x={(CARD_SIZE.x + CARD_SIZE.marginX) * l.baseX + (CARD_SIZE.x + CARD_SIZE.marginX) * xIndex}
             y={(CARD_SIZE.y + CARD_SIZE.marginY) * l.baseY + marginY}
@@ -123,17 +131,20 @@ class Board extends React.Component {
     }
 
     renderLayouts() {
-        var layouts = [];
-        var noop = () => {};
-        for (var i = 0; i < 4; i++) {
-            layouts.push(this.createLayout(i, 0, {name: 'F', onClick: noop}));
+        var L = this.props.cards.layouts;
+        const layouts = [];
+        for (var i = 0; i < L.foundations.length; i++) {
+            var F = L.foundations[i];
+            layouts.push(this.createLayout(F.xIndex, F.yIndex, F.props));
+        }
+        for (var i = 0; i < L.tableaus.length; i++) {
+            var T = L.tableaus[i];
+            layouts.push(this.createLayout(T.xIndex, T.yIndex, T.props));
         }
 
-        for (var i = 0; i < 7; i++) {
-            layouts.push(this.createLayout(i, 0, {name: 'T', onClick: noop}));
-        }
-
-        layouts.push(this.createLayout(0, 0, {name: 'S', onClick: () => this.props.onRestockPile()}));
+        var R = L.recycle;
+        R.props.onClick = () => this.props.onRestockPile();
+        layouts.push(this.createLayout(R.xIndex, R.yIndex, R.props));
         return (layouts);
     }
 
@@ -196,12 +207,31 @@ class Board extends React.Component {
 }
 
 class Game extends React.Component {
+
     constructor(props) {
         super(props);
         this.state = {
             history: [this.createNewGame()],
             takeCount: 1,
             isWon: false
+        };
+
+        this.hintTimer = -1;
+    }
+
+    getLatestHistory() {
+        var history = this.state.history;
+        return history[history.length - 1];
+    }
+
+    getLatestMove() {
+        var latest = this.getLatestHistory();
+        return {
+            W: latest.waste,
+            S: latest.stockpile,
+            F: latest.foundations,
+            T: latest.tableaus,
+            L: latest.layouts
         };
     }
 
@@ -225,20 +255,42 @@ class Game extends React.Component {
                 tblItems.push({
                     value: items[j].value,
                     suite: items[j].suite,
-                    isFaceUp: j >= items.length - 1
+                    isFaceUp: j >= items.length - 1,
+                    isHighlighted: false
                 });
             }
             tableaus.push(tblItems);
         }
 
-        var waste = []; //stockpile.splice(0, 23);
+        var waste =  stockpile.splice(0, 23);
 
         return {
             foundations: [[], [], [], []],
             tableaus: tableaus,
             stockpile: stockpile,
-            waste: waste
+            waste: waste,
+            layouts: this.createLayouts(),
         };
+    }
+
+    createLayouts() {
+        var layout = {
+            foundations: [],
+            tableaus: [],
+            recycle: {}
+        };
+        var noop = () => console.log('noop');
+
+        for (var i = 0; i < 4; i++) {
+            layout.foundations.push({xIndex: i, yIndex: 0, props: {name: 'F', onClick: noop, isHighlighted: false}});
+        }
+
+        for (var i = 0; i < 7; i++) {
+            layout.tableaus.push({xIndex: i, yIndex: 0, props: {name: 'T', onClick: noop, isHighlighted: false}});
+        }
+
+        layout.recycle={xIndex: 0, yIndex: 0, props: {name: 'R', onClick: noop, isHighlighted: false}};
+        return layout;
     }
 
     isWon(cards) {
@@ -292,14 +344,7 @@ class Game extends React.Component {
     }
 
     getValidMoves(type, xIndex, yIndex, props) {
-        var history = this.state.history;
-        var latest = history[history.length - 1];
-        const A = {
-            W: latest.waste,
-            S: latest.stockpile,
-            F: latest.foundations,
-            T: latest.tableaus
-        };
+        const A = this.getLatestMove();
 
         if (['W', 'S'].indexOf(type) > -1 && yIndex != A[type].length - 1) {
             return [];
@@ -318,52 +363,59 @@ class Game extends React.Component {
 
         var moves = [];
 
-        // Check Foundations
-        for (var i = 0; i < 4; i++) {
-            if ('F' === type && i === xIndex) {
-                continue;
+        if ('R' === type) {
+            if (A.S.length === 0 && A.W.length > 0) {
+                moves.push({type: 'R', index: 0});
             }
-
-            var AF = A.F[i];
-            if (props.value === 'A' && AF.length === 0) {
-                moves.push({type: 'F', index: i});
-            } else if (AF.length > 0) {
-                var sameSuit = AF[AF.length - 1].suite === props.suite;
-                if (!sameSuit) continue;
-                var prevIndex = ORDER.indexOf(AF[AF.length - 1].value);
-                var curIndex = ORDER.indexOf(props.value);
-
-                if (['W'].indexOf(type) > -1 && yIndex !== A[type].length - 1) {
-                    continue;
-                } else if (['T', 'F'].indexOf(type) > -1 && yIndex !== A[type][xIndex].length - 1) {
+        } else {
+            // Check Foundations
+            for (var i = 0; i < 4; i++) {
+                if ('F' === type && i === xIndex) {
                     continue;
                 }
-                if (prevIndex > -1 && curIndex > -1 && curIndex - prevIndex === 1) {
+
+                var AF = A.F[i];
+                if (props.value === 'A' && AF.length === 0) {
                     moves.push({type: 'F', index: i});
                     break;
+                } else if (AF.length > 0) {
+                    var sameSuit = AF[AF.length - 1].suite === props.suite;
+                    if (!sameSuit) continue;
+                    var prevIndex = ORDER.indexOf(AF[AF.length - 1].value);
+                    var curIndex = ORDER.indexOf(props.value);
+
+                    if (['W'].indexOf(type) > -1 && yIndex !== A[type].length - 1) {
+                        continue;
+                    } else if (['T', 'F'].indexOf(type) > -1 && yIndex !== A[type][xIndex].length - 1) {
+                        continue;
+                    }
+                    if (prevIndex > -1 && curIndex > -1 && curIndex - prevIndex === 1) {
+                        moves.push({type: 'F', index: i});
+                        break;
+                    }
                 }
             }
-        }
 
-        // Check Tableaus
-        for (var i = 0; i < 7; i++) {
-            if ('T' === type && i === xIndex) {
-                continue;
-            }
+            // Check Tableaus
+            for (var i = 0; i < 7; i++) {
+                if ('T' === type && i === xIndex) {
+                    continue;
+                }
 
-            var AT = A.T[i];
-            if (props.value === 'K' && AT.length === 0) {
-                moves.push({type: 'T', index: i});
-            } else if (AT.length > 0) {
-                var diffColor = !this.isSameColor(AT[AT.length - 1], props);
-                if (!diffColor) continue;
-
-                var prevIndex = ORDER.indexOf(AT[AT.length - 1].value);
-                var curIndex = ORDER.indexOf(props.value);
-
-                if (prevIndex > -1 && curIndex > -1 && prevIndex - curIndex === 1) {
+                var AT = A.T[i];
+                if (props.value === 'K' && AT.length === 0) {
                     moves.push({type: 'T', index: i});
-                    break;
+                } else if (AT.length > 0) {
+                    var diffColor = !this.isSameColor(AT[AT.length - 1], props);
+                    if (!diffColor) continue;
+
+                    var prevIndex = ORDER.indexOf(AT[AT.length - 1].value);
+                    var curIndex = ORDER.indexOf(props.value);
+
+                    if (prevIndex > -1 && curIndex > -1 && prevIndex - curIndex === 1) {
+                        moves.push({type: 'T', index: i});
+                        break;
+                    }
                 }
             }
         }
@@ -372,8 +424,7 @@ class Game extends React.Component {
     }
 
     handleCardClick(type, xIndex, yIndex, props) {
-        var history = this.state.history;
-        var latest = history[history.length - 1];
+        var latest = this.getLatestHistory();
 
         if (this.isWon(latest)) {
             return;
@@ -420,15 +471,130 @@ class Game extends React.Component {
         this.onMove(newState);
     }
 
+    removeHints() {
+        console.log('Removing hints');
+
+        var newState = JSON.parse(JSON.stringify(this.state));
+        var H = JSON.parse(JSON.stringify(this.getLatestHistory()));
+        H.layouts.recycle.props.isHighlighted = false;
+        for (var i = 0; i < H.waste.length; i++) {
+            H.waste[i].isHighlighted = false;
+        }
+        for (var i = 0; i < H.stockpile.length; i++) {
+            H.stockpile[i].isHighlighted = false;
+        }
+        for (var i = 0; i < 4; i++) {
+            for (var j = 0; j < H.foundations[i].length; j++) {
+                H.foundations[i][j].isHighlighted = false;
+            }
+        }
+        for (var i = 0; i < 7; i++) {
+            for (var j = 0; j < H.tableaus[i].length; j++) {
+                H.tableaus[i][j].isHighlighted = false;
+            }
+        }
+
+        newState.history.pop();
+        newState.history.push(H);
+
+        this.setState(newState);
+    }
+
+    showHints() {
+        window.clearTimeout(this.hintTimer);
+        const hints = this.getHints();
+
+        var newState = JSON.parse(JSON.stringify(this.state));
+        var H = JSON.parse(JSON.stringify(this.getLatestHistory()));
+
+        hints.forEach((hint, i) => {
+            if (hint.type === 'R') {
+                H.layouts.recycle.props.isHighlighted = true;
+            } else if (hint.type === 'S') {
+                H.stockpile[H.stockpile.length - 1].isHighlighted = true;
+            }  else if (hint.type === 'W') {
+                H.waste[H.waste.length - 1].isHighlighted = true;
+            } else if (hint.type === 'T') {
+                H.tableaus[hint.xIndex][hint.yIndex].isHighlighted = true;
+            } else if (hint.type === 'F') {
+                H.foundations[hint.xIndex][hint.yIndex].isHighlighted = true;
+            }
+
+        });
+
+        newState.history.pop();
+        newState.history.push(H);
+
+        this.hintTimer = window.setTimeout(() => this.removeHints(), 1000);
+
+        console.log(this.hintTimer);
+        this.setState(newState);
+    }
+
+    getHints() {
+        const A = this.getLatestMove();
+
+        // 1. List all cards that can be moved
+        var canMove = [];
+
+        // For foundation, Stock and Waste, only the last item can be moved
+
+        // a. Check Waste
+        if (A.W.length > 0) {
+            canMove.push({type: 'W', xIndex: 0, yIndex: A.W.length - 1, props: A.W[A.W.length - 1]});
+
+            if (A.S.length === 0) {
+                canMove.push({type: 'R', xIndex: 0, yIndex: 0, props: null});
+            }
+        }
+
+        // b. Check Stockpile
+        if (A.S.length > 0) {
+            canMove.push({type: 'S', xIndex: 0, yIndex: A.S.length - 1, props: A.S[A.S.length - 1]});
+        }
+
+        // c. Check Foundations
+        for (var i = 0; i < 4; i++) {
+            const AF = A.F[i];
+            if (AF.length > 0) {
+                canMove.push({type: 'F', xIndex: i, yIndex: AF.length - 1, props: AF[AF.length - 1]});
+            }
+        }
+
+        // For Tableaus, any opened card can be moved
+        for (var i = 0; i < 7; i++) {
+            const AT = A.T[i];
+
+            for (var j = 0; j < AT.length; j++) {
+                if (AT[j].isFaceUp) {
+                    canMove.push({type: 'T', xIndex: i, yIndex: j, props: AT[j]});
+                }
+            }
+        }
+
+        const hints = [];
+
+        for (var i = 0, l = canMove.length; i < l; i++) {
+            var M = canMove[i];
+            var moves = this.getValidMoves(M.type, M.xIndex, M.yIndex, M.props);
+            if (moves.length > 0) {
+                M.moves = moves;
+                hints.push(M);
+            }
+        }
+
+        return hints;
+    }
+
     render() {
-        var state = this.state;
-        var history = state.history;
+        var history = this.state.history;
         var latest = history[history.length - 1];
 
         return (
             <div className="game">
                 <button className='game-button' onClick={() => this.newGame()}>New Game</button>
                 <button className='game-button' onClick={() => this.undo()} style={{top: '25px'}}>Undo</button>
+                <button className='game-button' onClick={() => this.showHints()} style={{top: '50px'}}>Hint</button>
                 <Board
                     game={this}
                     takeCount={this.state.takeCount}
